@@ -1,0 +1,34 @@
+# @package model
+
+_target_: src.models.gpt.SmallGPT
+
+# Scaled up architecture
+vocab_size: 16384
+n_layer: 12                          # Double the layers
+n_head: 12                           # More attention heads
+n_embd: 768                          # Larger embedding dimension
+dropout: 0.1
+block_size: 1024                     # Longer sequences
+bias: false
+
+use_gradient_checkpointing: true     # Essential for larger models
+weight_tying: true
+
+# MPS optimizations for larger model
+mps_optimizations:
+  attention_chunk_size: 1024         # Smaller chunks for memory safety
+  max_batch_size: 4                  # Reduced batch size
+  memory_efficient_attention: true
+
+init:
+  type: "gpt2"
+  std: 0.02
+
+estimated_params: 124_000_000        # ~124M parameters
+memory_footprint_gb: 2.5
+
+metadata:
+  description: "Medium GPT model comparable to GPT-2 small"
+  target_use_case: "Serious training with good quality"
+  expected_training_time_hours: 8
+  recommended_dataset_size: "1GB - 10GB"

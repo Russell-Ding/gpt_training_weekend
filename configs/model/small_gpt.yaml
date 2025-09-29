@@ -1,0 +1,40 @@
+# @package model
+
+# Model architecture configuration
+_target_: src.models.gpt.SmallGPT     # Python class to instantiate
+
+# Core GPT architecture parameters
+vocab_size: 16384                     # Vocabulary size (reduced for efficiency)
+n_layer: 6                           # Number of transformer layers
+n_head: 6                            # Number of attention heads
+n_embd: 384                          # Embedding dimension
+dropout: 0.1                         # Dropout rate
+block_size: 512                      # Maximum sequence length
+bias: false                          # Use bias in linear layers (GPT-2 style: false)
+
+# Advanced architecture features
+use_flash_attention: false           # Flash attention (not available on MPS)
+use_gradient_checkpointing: true     # Save memory at cost of compute
+weight_tying: true                   # Tie input/output embeddings
+
+# MPS-specific optimizations
+mps_optimizations:
+  attention_chunk_size: 2048         # Chunk size for attention computation
+  max_batch_size: 8                  # Maximum batch size for memory safety
+  memory_efficient_attention: true    # Use memory-efficient attention variant
+
+# Model initialization
+init:
+  type: "gpt2"                       # Initialization scheme
+  std: 0.02                          # Standard deviation for weight init
+
+# Model size estimation (automatically calculated)
+estimated_params: 10_400_000         # ~10.4M parameters
+memory_footprint_gb: 0.5             # Estimated memory usage
+
+# Model metadata
+metadata:
+  description: "Small GPT model optimized for Apple Silicon training"
+  target_use_case: "Fast iteration and experimentation"
+  expected_training_time_hours: 2
+  recommended_dataset_size: "100MB - 1GB"

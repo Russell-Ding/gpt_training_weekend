@@ -1,0 +1,48 @@
+# @package _global_
+
+# Default configuration composition
+defaults:
+  - model: small_gpt              # Which model config to use
+  - training: mps_optimized       # Which training config to use
+  - data: shakespeare             # Which dataset config to use
+  - _self_                        # Include this file's settings
+
+# Global experiment settings
+experiment_name: "gpt_weekend_project"
+seed: 42
+debug: false
+
+# Output directory configuration
+output_dir: "outputs/${experiment_name}/${now:%Y-%m-%d_%H-%M-%S}"
+checkpoint_dir: "${output_dir}/checkpoints"
+log_dir: "${output_dir}/logs"
+
+# Weights & Biases configuration
+wandb:
+  project: "gpt-training-weekend"
+  entity: null                    # Your W&B username (or leave null for default)
+  mode: "online"                  # "online", "offline", or "disabled"
+  tags: ["gpt", "mps", "weekend"] # Tags for organizing experiments
+  notes: "Weekend GPT training project on Apple Silicon"
+
+# System configuration
+system:
+  device: "auto"                  # "auto", "mps", "cuda", or "cpu"
+  num_workers: 0                  # DataLoader workers (0 for MPS compatibility)
+  pin_memory: false               # Not needed for unified memory
+  mixed_precision: true           # Use mixed precision training
+
+# Hydra configuration (controls Hydra's behavior)
+hydra:
+  # Output directory for Hydra's files
+  run:
+    dir: "${output_dir}"
+
+  # Sweep configuration for hyperparameter optimization
+  sweep:
+    dir: "outputs/sweeps/${now:%Y-%m-%d_%H-%M-%S}"
+    subdir: "${hydra.job.num}"
+
+  # Job configuration
+  job:
+    chdir: false                  # Don't change working directory

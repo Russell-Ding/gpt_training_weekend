@@ -1,0 +1,40 @@
+# @package data
+
+# Dataset configuration
+_target_: src.data.dataset.TextDataset
+
+# Data source
+name: "shakespeare"
+source: "https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt"
+local_path: "data/shakespeare.txt"
+
+# Tokenization settings
+tokenizer:
+  _target_: src.data.tokenizer.GPTTokenizer
+  vocab_size: 16384                 # Match model vocab size
+  model_name: "gpt2"                # Base tokenizer
+  add_special_tokens: true
+
+# Data processing
+preprocessing:
+  max_length: 512                   # Match model block size
+  stride: 256                       # Overlap for sliding window
+  min_length: 50                    # Minimum sequence length
+
+# Data splitting
+train_split: 0.9
+val_split: 0.1
+test_split: 0.0                     # No test split for this small dataset
+
+# Data loading
+dataloader:
+  batch_size: null                  # Will be set by training config
+  shuffle: true
+  drop_last: true                   # Ensure consistent batch sizes
+  pin_memory: false                 # Not needed for MPS
+
+metadata:
+  description: "Tiny Shakespeare dataset for quick experiments"
+  size_mb: 1.1
+  num_tokens_approx: 300000
+  download_required: true

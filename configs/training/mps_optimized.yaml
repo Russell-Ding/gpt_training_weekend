@@ -1,0 +1,66 @@
+# @package training
+
+# Optimizer configuration
+optimizer:
+  _target_: torch.optim.AdamW
+  lr: 6e-4                           # Learning rate (GPT-3 optimal)
+  betas: [0.9, 0.95]                 # β2=0.95 is crucial for LLMs!
+  eps: 1e-8
+  weight_decay: 0.1                  # High weight decay for regularization
+  amsgrad: false
+
+# Parameter grouping for weight decay
+param_groups:
+  decay_params: ["embed", "linear", "conv"]     # Apply weight decay
+  no_decay_params: ["bias", "norm", "pos"]     # No weight decay
+
+# Learning rate scheduling (SGDR - Stochastic Gradient Descent with Restarts)
+scheduler:
+  type: "cosine_with_warmup"
+  warmup_steps: 2000                 # Linear warmup
+  max_steps: 100000                  # Total training steps
+  min_lr_ratio: 0.1                  # Minimum LR as fraction of max LR
+  restart_period: 10000              # SGDR restart period
+  restart_mult: 1.5                  # Restart period multiplier
+
+# Training loop configuration
+batch_size: 8                       # Base batch size (memory constrained)
+gradient_accumulation_steps: 8      # Effective batch size = 8 * 8 = 64
+max_steps: 100000                   # Total training steps
+eval_interval: 1000                 # Steps between evaluations
+save_interval: 5000                 # Steps between checkpoints
+log_interval: 100                   # Steps between logging
+
+# MPS-specific training settings
+mps_settings:
+  max_memory_fraction: 0.8          # Use 80% of available memory
+  memory_cleanup_interval: 1000     # Steps between memory cleanup
+  fallback_to_cpu: true             # Fallback if MPS fails
+  amp_dtype: "float16"              # Mixed precision dtype (not bfloat16!)
+  loss_scaling: 65536.0             # Manual loss scaling for mixed precision
+
+# Gradient management
+gradient:
+  clip_norm: 1.0                    # Gradient clipping norm
+  clip_type: "norm"                 # "norm" or "value"
+  accumulate_in_fp32: true          # Accumulate gradients in FP32
+
+# Validation configuration
+validation:
+  split: 0.1                        # Fraction of data for validation
+  batch_size: 4                     # Smaller batch for validation
+  max_eval_steps: 100               # Limit validation steps for speed
+
+# Checkpointing
+checkpoint:
+  save_optimizer: true              # Save optimizer state
+  save_scheduler: true              # Save scheduler state
+  keep_last_n: 3                   # Keep last N checkpoints
+  save_best_metric: "val_loss"     # Metric to track for best model
+
+# Training metadata
+metadata:
+  description: "MPS-optimized training for Apple Silicon"
+  expected_tokens_per_second: 2000
+  memory_efficient: true
+  stability_tested: true
