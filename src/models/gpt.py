@@ -45,29 +45,64 @@ class MultiHeadAttention(nn.Module):
         self.query_layers = nn.Linear(self.embedding_d, self.embedding_d, bias = config.bias)
         self.value_layers = nn.Linear(self.embedding_d, self.embedding_d, bias = config.bias)
 
+        self.attention_dropout = nn.Dropout(config.dropout)
+
+        # MPS - specific settings
+        self.chunk_size = config.attention_chunk_size
+        self.memory_efficient = config.memory_efficient_attention
+
+        # Causal mask (register as buffer so it moves with model to device) credit to claude
+        self.register_buffer("causal_mask",
+                             torch.tril(torch.ones(self.block_size, self.block_size))
+                             .view(1, 1, self.block_size, self.block_size))
+
+    def forward(self, input: torch.Tensor):
+        k_heads = self.key_layers(input).view(input.shape[0], self.n_heads, input.shape[1], self.head_dim)
+        q_heads = self.query_layers(input).view(input.shape[0], self.n_heads, input.shape[1], self.head_dim)
+        v_heads = self.value_layers(input).view(input.shape[0], self.n_heads, input.shape[1], self.head_dim)
+
+        if input.shape[1] <= self.chunk_size:
+            #### use standard_attention
+            self._standard_attention(k_heads, q_heads, v_heads)
 
 
-
-    def forward(self, input: torch.Tensor) -> torch.Tensor:
+    def _standard_attention(self, k_heads: torch.Tensor, q_heads: torch.Tensor, v_heads: torch.Tensor) -> torch.Tensor:
         '''
-
+        This is the normal way to develop attention mechanism
         :param input: (batch_size, seq_len, embedding_dim)
         :return:
         '''
 
-        k_heads = self.key_layers(input).view(input.shape[0], self.n_heads, input.shape[1], self.head_dim)
-        q_heads = self.query_layers(input).view(input.shape[0],  self.n_heads, input.shape[1], self.head_dim)
-        v_heads = self.value_layers(input).view(input.shape[0],  self.n_heads, input.shape[1], self.head_dim)
+        seq_length = q_heads.shape[2]
+
+        mask = self.causal_mask[:,:,:seq_length,:seq_length] #### get the mask
+
+
+        raw_score = torch.matmul(k_heads, q_heads.transpose(-1, -2))
+
+        raw_score.masked_fill(mask == 0, float('-inf'))
 
         #### get the matrix multiplication results
         #### get batch-size, n_heads, seq_len, seq_len
-        kq = nn.functional.softmax(torch.bmm(k_heads, q_heads.transpose(-1, -2))/math.sqrt(self.head_dim), dim=-1)
+        kq = nn.functional.softmax(raw_score/math.sqrt(self.head_dim), dim=-1)
 
-        h_atten = torch.bmm(kq, v_heads) #### batch-size, n_heads, seq_len, self.head_dim
+        h_atten = torch.matmul(kq, v_heads) #### batch-size, n_heads, seq_len, self.head_dim
+
 
         return h_atten.view(input.shape[0], input.shape[1], -1)
 
-    def _standard_attention
+    def _chunked_attention(self, input: torch.Tensor):
+        '''
+
+        :param input:(batch_size, seq_len, embedding_dim)
+        :return:
+        '''
+
+        # Process in chunks to avoid MPS memory limits
+        chunk_size = min(self.chunk_size, input.size[1]) #### seq_length is longer than possible trunks
+        num_chunks = (input.size[1] + chunk_size - 1) // chunk_size
+
+
 
 
 
