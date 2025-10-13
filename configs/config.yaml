@@ -27,7 +27,7 @@ wandb:
 
 # System configuration
 system:
-  device: "auto"                  # "auto", "mps", "cuda", or "cpu"
+  device: "mps"                  # "auto", "mps", "cuda", or "cpu"
   num_workers: 0                  # DataLoader workers (0 for MPS compatibility)
   pin_memory: false               # Not needed for unified memory
   mixed_precision: true           # Use mixed precision training

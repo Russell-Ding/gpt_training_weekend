@@ -45,6 +45,9 @@ gradient:
   clip_type: "norm"                 # "norm" or "value"
   accumulate_in_fp32: true          # Accumulate gradients in FP32
 
+# Memory optimization
+gradient_checkpointing: false       # Gradient checkpointing (trades compute for memory)
+
 # Validation configuration
 validation:
   split: 0.1                        # Fraction of data for validation
