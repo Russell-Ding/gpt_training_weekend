@@ -10,7 +10,7 @@ from typing import Optional
 @dataclass
 class GPTConfig:
     vocab_size: int = 16384  # Vocabulary size (reduced for efficiency)
-    n_layerL: int =  6  # Number of transformer layers
+    n_layer: int =  6  # Number of transformer layers
     n_head: int =6  # Number of attention heads
     n_embd: int = 384  # Embedding dimension
     dropout: float = 0.1  # Dropout rate
@@ -47,8 +47,9 @@ class MultiHeadAttention(nn.Module):
         self.key_layers = nn.Linear(self.embedding_d, self.embedding_d, bias = config.bias)
         self.query_layers = nn.Linear(self.embedding_d, self.embedding_d, bias = config.bias)
         self.value_layers = nn.Linear(self.embedding_d, self.embedding_d, bias = config.bias)
+        self.dropout = config.dropout
 
-        self.attention_dropout = nn.Dropout(config.dropout)
+        self.attention_dropout = nn.Dropout(self.dropout)
         self.resid_dropout = nn.Dropout(self.dropout)
 
         # MPS - specific settings
