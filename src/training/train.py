@@ -232,10 +232,22 @@ class HydraTrainingScript:
             vocab_size=self.cfg.model.vocab_size
         )
 
+        # Resolve paths relative to project root (not hydra output dir)
+        # Get the project root (where train.py is located, go up 2 levels)
+        project_root = Path(__file__).parent.parent.parent
+        train_path = project_root / self.cfg.data.train_path
+        val_path = project_root / self.cfg.data.val_path
+
+        print(f"   Current working directory: {os.getcwd()}")
+        print(f"   Project root: {project_root}")
+        print(f"   Train path (config): {self.cfg.data.train_path}")
+        print(f"   Train path (resolved): {train_path}")
+        print(f"   Train path exists: {train_path.exists()}")
+
         # Training dataset
-        if self.cfg.data.train_path and os.path.exists(self.cfg.data.train_path):
+        if train_path.exists():
             train_dataset = MemoryMappedDataset(
-                self.cfg.data.train_path,
+                str(train_path),
                 block_size=self.cfg.model.block_size,
                 stride=self.cfg.data.stride
             )
@@ -250,14 +262,14 @@ class HydraTrainingScript:
 
             print(f"   Train dataset: {len(train_dataset)} samples")
         else:
-            print(f"   ⚠️  Train data not found at {self.cfg.data.train_path}")
+            print(f"   ⚠️  Train data not found at {train_path}")
             print(f"   Creating dummy dataset for testing...")
             train_loader = self._create_dummy_dataloader('train')
 
         # Validation dataset
-        if self.cfg.data.val_path and os.path.exists(self.cfg.data.val_path):
+        if val_path.exists():
             val_dataset = MemoryMappedDataset(
-                self.cfg.data.val_path,
+                str(val_path),
                 block_size=self.cfg.model.block_size,
                 stride=self.cfg.model.block_size  # No overlap for validation
             )
@@ -272,7 +284,7 @@ class HydraTrainingScript:
 
             print(f"   Val dataset: {len(val_dataset)} samples")
         else:
-            print(f"   ⚠️  Val data not found at {self.cfg.data.val_path}")
+            print(f"   ⚠️  Val data not found at {val_path}")
             print(f"   Creating dummy dataset for testing...")
             val_loader = self._create_dummy_dataloader('val')
 
@@ -536,13 +548,13 @@ class TrainingLoop:
                 batch = next(train_iter)
 
             # Move to device
-            input_ids = batch['input_ids'].to(self.device)
-            targets = batch['targets'].to(self.device)
+            input_ids = batch[0].to(self.device)
+            targets = batch[1].to(self.device)
 
             # Forward pass
             with torch.amp.autocast(device_type=str(self.device), dtype=torch.float16,
                                     enabled=self.cfg.training.mixed_precision):
-                logits = self.model(input_ids)
+                logits, _ = self.model(input_ids)
 
                 # Calculate loss
                 loss = nn.functional.cross_entropy(
@@ -591,8 +603,8 @@ class TrainingLoop:
 
         with torch.no_grad():
             for batch in tqdm(self.val_loader, desc="Evaluating", leave=False):
-                input_ids = batch['input_ids'].to(self.device)
-                targets = batch['targets'].to(self.device)
+                input_ids = batch[0].to(self.device)
+                targets = batch[1].to(self.device)
 
                 logits = self.model(input_ids)
                 loss = nn.functional.cross_entropy(

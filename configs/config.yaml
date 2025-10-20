@@ -11,6 +11,7 @@ defaults:
 experiment_name: "gpt_weekend_project"
 seed: 42
 debug: false
+resume_from_checkpoint: null  # Path to checkpoint to resume from (null for new training)
 
 # Output directory configuration
 output_dir: "outputs/${experiment_name}/${now:%Y-%m-%d_%H-%M-%S}"
@@ -19,11 +20,11 @@ log_dir: "${output_dir}/logs"
 
 # Weights & Biases configuration
 wandb:
+  enabled: false                  # Set to true to enable W&B logging
   project: "gpt-training-weekend"
-  entity: null                    # Your W&B username (or leave null for default)
-  mode: "online"                  # "online", "offline", or "disabled"
-  tags: ["gpt", "mps", "weekend"] # Tags for organizing experiments
-  notes: "Weekend GPT training project on Apple Silicon"
+  name: null                      # Run name (auto-generated if null)
+  run_id: null                    # Resume specific run (null for new run)
+  watch_model: false              # Watch model gradients (expensive)
 
 # System configuration
 system:

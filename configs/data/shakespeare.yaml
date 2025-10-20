@@ -2,15 +2,6 @@
 
 # Shakespeare dataset configuration
 dataset_name: "shakespeare"
-data_dir: "data/shakespeare"
-train_file: "${data.data_dir}/train.bin"
-val_file: "${data.data_dir}/val.bin"
-
-# Tokenization
-vocab_size: 50257  # GPT-2 tokenizer vocab size
-block_size: 256    # Context length
-
-# Data loading
-batch_size: 32
-shuffle: true
-drop_last: true
+train_path: "data/shakespeare/train.bin"
+val_path: "data/shakespeare/val.bin"
+stride: 256  # Stride for sliding window (no overlap)

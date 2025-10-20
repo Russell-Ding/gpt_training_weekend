@@ -21,9 +21,9 @@ class GPTConfig:
     use_flash_attention: bool =  False  # Flash attention (not available on MPS)
     use_gradient_checkpointing: bool =  True  # Save memory at cost of compute
     weight_tying: bool = True
+    memory_efficient_attention: bool = True  # Memory-efficient attention
 
     # MPS optimizations
-    use_gradient_checkpointing: bool = True
     attention_chunk_size: int = 2048
     max_batch_size: int = 8
 
@@ -55,14 +55,15 @@ class MultiHeadAttention(nn.Module):
         # MPS - specific settings
         self.chunk_size = config.attention_chunk_size
         self.memory_efficient = config.memory_efficient_attention
+        self.block_size = config.block_size
 
         # Causal mask (register as buffer so it moves with model to device) credit to claude
         self.register_buffer("causal_mask",
-                             torch.tril(torch.ones(self.block_size, self.block_size))
-                             .view(1, 1, self.block_size, self.block_size))
+                             torch.tril(torch.ones(config.block_size, config.block_size))
+                             .view(1, 1, config.block_size, config.block_size))
 
         # Output projection
-        self.out_proj = nn.Linear(self.n_embd, self.n_embd, bias=config.bias)
+        self.out_proj = nn.Linear(config.n_embd, config.n_embd, bias=config.bias)
 
     def forward(self, input: torch.Tensor):
         ### each of them is converted into (batch_size, n_heads, seq_len, head_dim)
@@ -148,17 +149,19 @@ class FeedForward(nn.Module):
 
         self.dropout = config.dropout
 
+        self.nn_dropout = nn.Dropout(self.dropout)
+
         self.hidden_d = 4*self.embedding_d
 
-        self.linear1 = nn.Linear(self.embedding_d, self.hidden, bias = config.bias)
-        self.linear2 = nn.Linear(self.hidden,self.embedding_d, bias=config.bias)
+        self.linear1 = nn.Linear(self.embedding_d, self.hidden_d, bias = config.bias)
+        self.linear2 = nn.Linear(self.hidden_d,self.embedding_d, bias=config.bias)
 
 
 
     def forward(self, inputs):
 
         inputs = F.gelu(self.linear1(inputs))
-        inputs = self.dropout(self.linear2(inputs))
+        inputs = self.nn_dropout(self.linear2(inputs))
 
         return inputs
 
@@ -231,11 +234,13 @@ class SmallGPT(nn.Module):
             torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
 
     def forward(self, inputs: torch.Tensor, targets: Optional[torch.Tensor] = None):
+        # Ensure inputs are long type (required for embeddings, not affected by autocast)
+        inputs = inputs.long()
 
         batch_szie, token_length =  inputs.shape
 
-        position_ids = torch.arange(0, token_length, dtype = torch.float32,
-                                    device = inputs.device
+        position_ids = torch.arange(0, token_length, dtype=torch.long,
+                                    device=inputs.device
                                     )
         embedded_tokens = self.token_embed(inputs)
         position_tokens = self.pos_embed(position_ids)
@@ -253,6 +258,8 @@ class SmallGPT(nn.Module):
         # Calculate loss if targets provided
         loss = None
         if targets is not None:
+            # Ensure targets are long type (required for cross_entropy)
+            targets = targets.long()
             # Flatten for cross-entropy calculation
             logits_flat = logits.view(-1, logits.size(-1))
             targets_flat = targets.view(-1)
