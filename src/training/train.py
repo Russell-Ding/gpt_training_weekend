@@ -606,7 +606,7 @@ class TrainingLoop:
                 input_ids = batch[0].to(self.device)
                 targets = batch[1].to(self.device)
 
-                logits = self.model(input_ids)
+                logits, _ = self.model(input_ids)
                 loss = nn.functional.cross_entropy(
                     logits.reshape(-1, logits.size(-1)),
                     targets.reshape(-1),
