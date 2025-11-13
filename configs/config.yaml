@@ -2,7 +2,7 @@
 
 # Default configuration composition
 defaults:
-  - model: small_gpt              # Which model config to use
+  - model: tiny_gpt              # Which model config to use
   - training: mps_optimized       # Which training config to use
   - data: shakespeare             # Which dataset config to use
   - _self_                        # Include this file's settings

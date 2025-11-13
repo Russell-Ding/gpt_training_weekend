@@ -46,28 +46,43 @@ class MemoryMappedDataset(Dataset):
             data_path: str,
             block_size: int = 1024,
             stride: Optional[int] = None,
-            vocab_size: int = 50257
+            vocab_size: int = 50257,
+            dtype: Optional[np.dtype] = None
     ):
         """
         Initialize memory-mapped dataset.
 
         Args:
-            data_path: Path to binary file (uint16 tokens)
+            data_path: Path to binary file
             block_size: Sequence length for training
             stride: Step size for sliding window (default: block_size)
             vocab_size: Vocabulary size (for validation)
+            dtype: Data type to use (auto-detected if None)
         """
         self.data_path = Path(data_path)
         self.block_size = block_size
         self.stride = stride or block_size
         self.vocab_size = vocab_size
 
+        # Auto-detect dtype based on vocab_size if not specified
+        if dtype is None:
+            if vocab_size < 256:
+                dtype = np.uint8
+            elif vocab_size < 65536:
+                dtype = np.uint16
+            else:
+                dtype = np.uint32
+
+        self.dtype = dtype
+
         # Memory map the data file
-        # dtype=uint16 can represent vocab sizes up to 65,535
-        # This is 2× more memory efficient than int32
+        # dtype selection based on vocab size for memory efficiency:
+        # - uint8: vocab < 256 (character-level)
+        # - uint16: vocab < 65,536 (most BPE tokenizers)
+        # - uint32: vocab >= 65,536 (very large vocabularies)
         self.data = np.memmap(
             str(self.data_path),
-            dtype=np.uint16,
+            dtype=self.dtype,
             mode='r'  # Read-only
         )
 
@@ -78,6 +93,7 @@ class MemoryMappedDataset(Dataset):
         print(f"📊 MemoryMappedDataset loaded:")
         print(f"   File: {self.data_path}")
         print(f"   Total tokens: {len(self.data):,}")
+        print(f"   Data type: {self.dtype}")
         print(f"   Block size: {block_size}")
         print(f"   Stride: {self.stride}")
         print(f"   Sequences: {self.num_sequences:,}")
@@ -321,32 +337,32 @@ class GPTTokenizer:
 
 class MPS_DataLoader:
     """
-    MPS-compatible DataLoader.
+    Device-agnostic DataLoader that auto-configures for MPS, CUDA, or CPU.
 
-    CRITICAL MPS LIMITATIONS:
-    1. No multiprocessing workers (num_workers must be 0)
-    2. No pin_memory (unified memory, not needed)
-    3. Careful batch size management (memory limits)
+    DEVICE-SPECIFIC OPTIMIZATIONS:
 
-    Why these limitations?
-    - MPS uses unified memory (not separate GPU memory)
-    - Multiprocessing conflicts with MPS context
-    - Must be extra careful with memory usage
+    MPS (Apple Silicon):
+    - num_workers=0 (multiprocessing conflicts with MPS context)
+    - pin_memory=False (unified memory, not needed)
 
-    Optimizations:
-    - Prefetch next batch while training current
-    - Dynamic batch sizing based on sequence length
-    - Memory-conscious batching
+    CUDA (NVIDIA GPUs):
+    - num_workers=4 (parallel data loading)
+    - pin_memory=True (faster CPU->GPU transfers)
+
+    CPU:
+    - num_workers=4 (parallel processing)
+    - pin_memory=False (no GPU)
 
     Example:
+        >>> # Auto-detects device type and optimizes accordingly
         >>> loader = MPS_DataLoader(
         >>>     dataset,
         >>>     batch_size=8,
-        >>>     device='mps'
+        >>>     device='cuda'  # Will use CUDA-optimized settings
         >>> )
         >>>
         >>> for batch in loader:
-        >>>     # batch is already on MPS device
+        >>>     # batch is already on specified device
         >>>     outputs = model(batch)
     """
 
@@ -356,39 +372,76 @@ class MPS_DataLoader:
             batch_size: int = 8,
             shuffle: bool = True,
             device: Optional[torch.device] = None,
-            drop_last: bool = True
+            drop_last: bool = True,
+            num_workers: Optional[int] = None
     ):
         """
-        Initialize MPS-compatible DataLoader.
+        Initialize device-optimized DataLoader.
 
         Args:
             dataset: Dataset to load from
             batch_size: Batch size
             shuffle: Shuffle data each epoch
-            device: Target device (MPS or CPU)
+            device: Target device (auto-detected if None)
             drop_last: Drop last incomplete batch
+            num_workers: Number of workers (auto-configured if None)
         """
         self.dataset = dataset
         self.batch_size = batch_size
         self.shuffle = shuffle
-        self.device = device or torch.device('cpu')
         self.drop_last = drop_last
 
-        # Create underlying DataLoader with MPS-safe settings
+        # Auto-detect device if not specified
+        if device is None:
+            if torch.cuda.is_available():
+                device = torch.device('cuda')
+            elif torch.backends.mps.is_available():
+                device = torch.device('mps')
+            else:
+                device = torch.device('cpu')
+        elif isinstance(device, str):
+            device = torch.device(device)
+
+        self.device = device
+
+        # Auto-configure num_workers and pin_memory based on device
+        if num_workers is None:
+            if self.device.type == 'mps':
+                num_workers = 0  # MPS requires 0 workers
+                pin_memory = False
+                optimization = "MPS (unified memory)"
+            elif self.device.type == 'cuda':
+                num_workers = 4  # CUDA benefits from parallel loading
+                pin_memory = True  # Speed up CPU->GPU transfers
+                optimization = "CUDA (pinned memory + workers)"
+            else:  # CPU
+                num_workers = 4
+                pin_memory = False
+                optimization = "CPU (parallel workers)"
+        else:
+            # User specified num_workers - respect it
+            pin_memory = (self.device.type == 'cuda')
+            optimization = "Manual configuration"
+
+        self.num_workers = num_workers
+        self.pin_memory = pin_memory
+
+        # Create underlying DataLoader with device-optimized settings
         self.dataloader = DataLoader(
             dataset,
             batch_size=batch_size,
             shuffle=shuffle,
-            num_workers=0,  # CRITICAL: Must be 0 for MPS!
-            pin_memory=False,  # Not needed for unified memory
+            num_workers=num_workers,
+            pin_memory=pin_memory,
             drop_last=drop_last,
-            persistent_workers=False
+            persistent_workers=(num_workers > 0)  # Only if using workers
         )
 
-        print(f"🔄 MPS_DataLoader initialized:")
+        print(f"🔄 DataLoader initialized ({optimization}):")
+        print(f"   Device: {self.device}")
         print(f"   Batch size: {batch_size}")
-        print(f"   Device: {device}")
-        print(f"   Num workers: 0 (MPS requirement)")
+        print(f"   Num workers: {num_workers}")
+        print(f"   Pin memory: {pin_memory}")
         print(f"   Dataset size: {len(dataset):,}")
         print(f"   Batches per epoch: {len(self.dataloader):,}")
 

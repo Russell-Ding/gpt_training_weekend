@@ -11,7 +11,7 @@ local_path: "data/shakespeare.txt"
 # Tokenization settings
 tokenizer:
   _target_: src.data.tokenizer.GPTTokenizer
-  vocab_size: 16384                 # Match model vocab size
+  vocab_size: 65                    # Match model vocab size (character-level)
   model_name: "gpt2"                # Base tokenizer
   add_special_tokens: true
 

@@ -4,7 +4,7 @@
 _target_: src.models.gpt.SmallGPT     # Python class to instantiate
 
 # Core GPT architecture parameters
-vocab_size: 16384                     # Vocabulary size (reduced for efficiency)
+vocab_size: 50257                     # Vocabulary size (full GPT-2 BPE for fair comparison)
 n_layer: 6                           # Number of transformer layers
 n_head: 6                            # Number of attention heads
 n_embd: 384                          # Embedding dimension
@@ -16,6 +16,10 @@ bias: false                          # Use bias in linear layers (GPT-2 style: f
 use_flash_attention: false           # Flash attention (not available on MPS)
 use_gradient_checkpointing: true     # Save memory at cost of compute
 weight_tying: true                   # Tie input/output embeddings
+# Normalization options
+use_rmsnorm: bool = True  # Toggle between LayerNorm and RMSNorm
+norm_eps: float = 1e-6
+rmsnorm_use_float32: bool = True  # For MPS stability
 
 # MPS-specific optimizations
 mps_optimizations:

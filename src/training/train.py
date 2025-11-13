@@ -43,7 +43,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 from src.models.gpt import GPTConfig, SmallGPT
 from src.training.mps_optimizer import MPSDeviceManager
 from src.evaluation.metrics import ModelEvaluator
-from src.data.dataset import MemoryMappedDataset, GPTTokenizer
+from src.data.dataset import MemoryMappedDataset  # GPTTokenizer not needed for training
 
 
 @dataclass
@@ -227,10 +227,9 @@ class HydraTrainingScript:
         """Initialize training and validation dataloaders."""
         print("\n📊 Initializing data loaders...")
 
-        # Initialize tokenizer
-        tokenizer = GPTTokenizer(
-            vocab_size=self.cfg.model.vocab_size
-        )
+        # Note: We don't need GPTTokenizer here since data is already tokenized
+        # The .bin files were created by prepare_shakespeare_bpe_small.py
+        # Tokenizer is only needed for inference/generation (not training)
 
         # Resolve paths relative to project root (not hydra output dir)
         # Get the project root (where train.py is located, go up 2 levels)
@@ -252,12 +251,13 @@ class HydraTrainingScript:
                 stride=self.cfg.data.stride
             )
 
-            train_loader = DataLoader(
+            # Use device-optimized DataLoader (auto-configures for CUDA/MPS/CPU)
+            from src.data.dataset import MPS_DataLoader
+            train_loader = MPS_DataLoader(
                 train_dataset,
                 batch_size=self.cfg.training.batch_size,
                 shuffle=True,
-                num_workers=0,  # MPS limitation
-                pin_memory=False
+                device=self.device
             )
 
             print(f"   Train dataset: {len(train_dataset)} samples")
@@ -274,12 +274,13 @@ class HydraTrainingScript:
                 stride=self.cfg.model.block_size  # No overlap for validation
             )
 
-            val_loader = DataLoader(
+            # Use device-optimized DataLoader (auto-configures for CUDA/MPS/CPU)
+            from src.data.dataset import MPS_DataLoader
+            val_loader = MPS_DataLoader(
                 val_dataset,
                 batch_size=self.cfg.training.eval_batch_size,
                 shuffle=False,
-                num_workers=0,
-                pin_memory=False
+                device=self.device
             )
 
             print(f"   Val dataset: {len(val_dataset)} samples")
@@ -316,11 +317,13 @@ class HydraTrainingScript:
         size = 1000 if split == 'train' else 100
         dataset = DummyDataset(size, self.cfg.model.block_size, self.cfg.model.vocab_size)
 
-        return DataLoader(
+        # Use device-optimized DataLoader
+        from src.data.dataset import MPS_DataLoader
+        return MPS_DataLoader(
             dataset,
             batch_size=self.cfg.training.batch_size if split == 'train' else self.cfg.training.eval_batch_size,
             shuffle=(split == 'train'),
-            num_workers=0
+            device=self.device
         )
 
     def initialize_wandb(self):

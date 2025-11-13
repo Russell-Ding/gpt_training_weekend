@@ -21,12 +21,15 @@ def device() -> torch.device:
     Fixture to determine and return the best available device.
 
     Returns:
-        torch.device: CUDA device if available, otherwise CPU
+        torch.device: CUDA device if available, MPS if available, otherwise CPU
     """
     if torch.cuda.is_available():
         device = torch.device("cuda")
         print(f"Using CUDA device: {torch.cuda.get_device_name()}")
         print(f"CUDA memory: {torch.cuda.get_device_properties(device).total_memory / 1e9:.1f} GB")
+    elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+        device = torch.device("mps")
+        print("Using MPS device (Apple Silicon)")
     else:
         device = torch.device("cpu")
         print("Using CPU device")
@@ -56,6 +59,19 @@ def gpu_device() -> torch.device:
     if not torch.cuda.is_available():
         pytest.skip("GPU not available")
     return torch.device("cuda")
+
+
+@pytest.fixture(scope="session")
+def mps_device() -> torch.device:
+    """
+    Fixture that returns MPS device, skipping test if MPS not available.
+
+    Returns:
+        torch.device: MPS device (Apple Silicon)
+    """
+    if not (hasattr(torch.backends, "mps") and torch.backends.mps.is_available()):
+        pytest.skip("MPS not available")
+    return torch.device("mps")
 
 
 @pytest.fixture(scope="function")
@@ -290,6 +306,10 @@ def pytest_runtest_setup(item):
     # Skip GPU tests if no GPU available
     if item.get_closest_marker("gpu") and not torch.cuda.is_available():
         pytest.skip("GPU not available")
+
+    # Skip MPS tests if MPS not available
+    if item.get_closest_marker("mps") and not (hasattr(torch.backends, "mps") and torch.backends.mps.is_available()):
+        pytest.skip("MPS not available")
 
     # Skip slow tests in fast test runs
     if item.get_closest_marker("slow") and item.config.getoption("-k", default="").find("not slow") != -1:

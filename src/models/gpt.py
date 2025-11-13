@@ -4,12 +4,13 @@ import torch.nn as nn
 import math
 import torch.nn.functional as F
 from typing import Optional
+from src.models.normalization import MPSRMSNorm
 
 
 
 @dataclass
 class GPTConfig:
-    vocab_size: int = 16384  # Vocabulary size (reduced for efficiency)
+    vocab_size: int = 50257  # Vocabulary size (full GPT-2 BPE)
     n_layer: int =  6  # Number of transformer layers
     n_head: int =6  # Number of attention heads
     n_embd: int = 384  # Embedding dimension
@@ -22,6 +23,11 @@ class GPTConfig:
     use_gradient_checkpointing: bool =  True  # Save memory at cost of compute
     weight_tying: bool = True
     memory_efficient_attention: bool = True  # Memory-efficient attention
+
+    # Normalization options
+    use_rmsnorm: bool = True  # Toggle between LayerNorm and RMSNorm
+    norm_eps: float = 1e-6
+    rmsnorm_use_float32: bool = True  # For MPS stability
 
     # MPS optimizations
     attention_chunk_size: int = 2048
@@ -171,8 +177,13 @@ class TransformerBlock(nn.Module):
         self.config = config
 
         # Layer normalization (pre-norm style, like GPT-2)
-        self.normal_layer1 = nn.LayerNorm(config.n_embd, bias=config.bias)
-        self.normal_layer2 = nn.LayerNorm(config.n_embd, bias=config.bias)
+
+        if self.config.use_rmsnorm:
+            self.normal_layer1 = MPSRMSNorm(config.n_embd, config.norm_eps, config.rmsnorm_use_float32)
+            self.normal_layer2 = MPSRMSNorm(config.n_embd, config.norm_eps, config.rmsnorm_use_float32)
+        else:
+            self.normal_layer1 = nn.LayerNorm(config.n_embd, bias=config.bias)
+            self.normal_layer2 = nn.LayerNorm(config.n_embd, bias=config.bias)
 
         # Multi-head attention
         self.attn = MultiHeadAttention(config)
@@ -215,8 +226,10 @@ class SmallGPT(nn.Module):
             TransformerBlock(config) for _ in range(config.n_layer)
         ])
 
-
-        self.final_normal = nn.LayerNorm(config.n_embd, bias=config.bias)
+        if config.use_rmsnorm:
+            self.final_normal = MPSRMSNorm(config.n_embd, config.norm_eps, config.rmsnorm_use_float32)
+        else:
+            self.final_normal = nn.LayerNorm(config.n_embd, bias=config.bias)
 
         # Output projection (language modeling head)
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
@@ -301,7 +314,7 @@ def create_model_from_config():
 
     # Create configuration
     config = GPTConfig(
-        vocab_size=16384,
+        vocab_size=50257,  # Full GPT-2 BPE
         n_layer=6,  # TransformerBlock will create 6 blocks
         n_head=6,  # MultiHeadAttention will use 6 heads
         n_embd=384,  # All components will use 384d embeddings

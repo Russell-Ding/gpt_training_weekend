@@ -3,7 +3,7 @@
 _target_: src.models.gpt.SmallGPT
 
 # Scaled up architecture
-vocab_size: 16384
+vocab_size: 50257                    # Vocabulary size (full GPT-2 BPE for fair comparison)
 n_layer: 12                          # Double the layers
 n_head: 12                           # More attention heads
 n_embd: 768                          # Larger embedding dimension
